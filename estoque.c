@@ -41,6 +41,20 @@ int garantirCapacidade(void) {
     return 1;
 }
 
+void limparTela(void) {
+#ifdef _WIN32
+    system("cls");
+#else
+    system("clear");
+#endif
+}
+
+void pausar(void) {
+    printf("\nPressione Enter para voltar ao menu...");
+    char buffer[10];
+    fgets(buffer, sizeof(buffer), stdin);
+}
+
 int mesAtual(void) {
     time_t agora = time(NULL);
     struct tm *data = localtime(&agora);
@@ -214,109 +228,174 @@ int existeProduto(const char *nome) {
 }
 
 void cadastrarProduto(void) {
-    Produto p;
-    int conflito;
+    while (1) {
+        limparTela();
+        printf("=========================================\n");
+        printf("           CADASTRO DE PRODUTO           \n");
+        printf("=========================================\n\n");
 
-    if (!garantirCapacidade()) {
-        printf("Memoria insuficiente para cadastrar novos produtos.\n");
-        return;
-    }
+        Produto p;
+        int conflito;
 
-    do {
-        lerTexto("Nome do produto: ", p.nome, 100);
-        lerTexto("Codigo de barras: ", p.codigoBarras, 100);
-
-        conflito = indiceConflitoIdentidade(p.nome, p.codigoBarras);
-        if (conflito != -1) {
-            printf("Conflito: o produto \"%s\" ja esta cadastrado com o codigo de barras %s.\n",
-                   produtos[conflito].nome, produtos[conflito].codigoBarras);
-            printf("O mesmo nome e codigo de barras devem identificar o mesmo produto. Informe novamente.\n");
+        if (!garantirCapacidade()) {
+            printf("Memoria insuficiente para cadastrar novos produtos.\n");
+            pausar();
+            break;
         }
-    } while (conflito != -1);
 
-    int produtoExistente = existeProduto(p.nome);
-    if (produtoExistente)
-        printf("Produto ja cadastrado. Sera registrado um novo lote.\n");
+        do {
+            lerTexto("Nome do produto: ", p.nome, 100);
+            lerTexto("Codigo de barras: ", p.codigoBarras, 100);
 
-    p.preco = lerPreco("Preco de venda: ");
-    lerTexto("Marca: ", p.marca, 100);
-    lerTexto("Categoria: ", p.categoria, 100);
+            conflito = indiceConflitoIdentidade(p.nome, p.codigoBarras);
+            if (conflito != -1) {
+                printf("Conflito: o produto \"%s\" ja esta cadastrado com o codigo de barras %s.\n",
+                       produtos[conflito].nome, produtos[conflito].codigoBarras);
+                printf("O mesmo nome e codigo de barras devem identificar o mesmo produto. Informe novamente.\n");
+            }
+        } while (conflito != -1);
 
-    do {
-        lerTexto("Lote: ", p.lote, 100);
-        if (strchr(p.lote, ';') != NULL) {
-            printf("O lote nao pode conter ponto e virgula.\n");
-            p.lote[0] = '\0';
+        int produtoExistente = existeProduto(p.nome);
+        if (produtoExistente)
+            printf("Produto ja cadastrado. Sera registrado um novo lote.\n");
+
+        p.preco = lerPreco("Preco de venda: ");
+        lerTexto("Marca: ", p.marca, 100);
+        lerTexto("Categoria: ", p.categoria, 100);
+
+        do {
+            lerTexto("Lote: ", p.lote, 100);
+            if (strchr(p.lote, ';') != NULL) {
+                printf("O lote nao pode conter ponto e virgula.\n");
+                p.lote[0] = '\0';
+                continue;
+            }
+            if (existeNomeELote(p.nome, p.lote))
+                printf("Produto ja cadastrado neste lote. Informe um lote diferente.\n");
+        } while (strlen(p.lote) == 0 || existeNomeELote(p.nome, p.lote));
+
+        do {
+            lerTexto("Data de validade (dd/mm/aaaa): ", p.validade, 100);
+            if (!dataValida(p.validade))
+                printf("Data invalida! Use o formato dd/mm/aaaa (ex: 25/12/2026).\n");
+        } while (!dataValida(p.validade));
+
+        p.quantidade = lerInteiro("Quantidade em estoque: ", 0);
+        p.quantidadeMinima = lerInteiro("Quantidade minima: ", 0);
+
+        p.id = totalProdutos + 1;
+        produtos[totalProdutos] = p;
+        estoqueMensal[totalProdutos][mesAtual()] = p.quantidade;
+        totalProdutos = totalProdutos + 1;
+
+        printf("\nProduto cadastrado com sucesso!\n");
+
+        char resposta[10];
+        lerTexto("\nDeseja cadastrar mais produtos? (s/n): ", resposta, sizeof(resposta));
+        if (resposta[0] == 's' || resposta[0] == 'S') {
             continue;
+        } else {
+            break;
         }
-        if (existeNomeELote(p.nome, p.lote))
-            printf("Produto ja cadastrado neste lote. Informe um lote diferente.\n");
-    } while (strlen(p.lote) == 0 || existeNomeELote(p.nome, p.lote));
-
-    do {
-        lerTexto("Data de validade (dd/mm/aaaa): ", p.validade, 100);
-        if (!dataValida(p.validade))
-            printf("Data invalida! Use o formato dd/mm/aaaa (ex: 25/12/2026).\n");
-    } while (!dataValida(p.validade));
-
-    p.quantidade = lerInteiro("Quantidade em estoque: ", 0);
-    p.quantidadeMinima = lerInteiro("Quantidade minima: ", 0);
-
-    p.id = totalProdutos + 1;
-    produtos[totalProdutos] = p;
-    estoqueMensal[totalProdutos][mesAtual()] = p.quantidade;
-    totalProdutos = totalProdutos + 1;
-
-    printf("Produto cadastrado com sucesso!\n");
+    }
 }
 
 void procurarProdutoPorNome(void) {
-    char nomeBusca[100];
-    int encontrado = 0;
+    while (1) {
+        limparTela();
+        printf("=========================================\n");
+        printf("       BUSCA DE PRODUTO POR NOME         \n");
+        printf("=========================================\n\n");
 
-    lerTexto("Nome do produto: ", nomeBusca, 100);
+        if (totalProdutos == 0) {
+            printf("Nenhum produto cadastrado.\n");
+            pausar();
+            break;
+        }
 
-    for (int i = 0; i < totalProdutos; i++) {
-        if (textosIguais(produtos[i].nome, nomeBusca)) {
-            printf("\nID: %d\n", produtos[i].id);
-            printf("Nome: %s\n", produtos[i].nome);
-            printf("Codigo de barras: %s\n", produtos[i].codigoBarras);
-            printf("Preco: R$ %.2f\n", produtos[i].preco);
-            printf("Marca: %s\n", produtos[i].marca);
-            printf("Categoria: %s\n", produtos[i].categoria);
-            printf("Lote: %s\n", produtos[i].lote);
-            printf("Validade: %s\n", produtos[i].validade);
-            printf("Quantidade: %d\n", produtos[i].quantidade);
-            printf("Quantidade minima: %d\n\n", produtos[i].quantidadeMinima);
-            encontrado = 1;
+        char nomeBusca[100];
+        int encontrado = 0;
+
+        lerTexto("Nome do produto: ", nomeBusca, 100);
+
+        for (int i = 0; i < totalProdutos; i++) {
+            if (textosIguais(produtos[i].nome, nomeBusca)) {
+                printf("\nID: %d\n", produtos[i].id);
+                printf("Nome: %s\n", produtos[i].nome);
+                printf("Codigo de barras: %s\n", produtos[i].codigoBarras);
+                printf("Preco: R$ %.2f\n", produtos[i].preco);
+                printf("Marca: %s\n", produtos[i].marca);
+                printf("Categoria: %s\n", produtos[i].categoria);
+                printf("Lote: %s\n", produtos[i].lote);
+                printf("Validade: %s\n", produtos[i].validade);
+                printf("Quantidade: %d\n", produtos[i].quantidade);
+                printf("Quantidade minima: %d\n\n", produtos[i].quantidadeMinima);
+                encontrado = 1;
+            }
+        }
+
+        if (encontrado == 0)
+            printf("\nProduto nao encontrado.\n");
+
+        char resposta[10];
+        lerTexto("\nDeseja realizar outra busca por nome? (s/n): ", resposta, sizeof(resposta));
+        if (resposta[0] == 's' || resposta[0] == 'S') {
+            continue;
+        } else {
+            break;
         }
     }
-
-    if (encontrado == 0)
-        printf("Produto nao encontrado.\n");
 }
 
 void filtrarPorMarca(void) {
-    char marcaBusca[100];
-    int encontrado = 0;
+    while (1) {
+        limparTela();
+        printf("=========================================\n");
+        printf("          FILTRAR POR MARCA              \n");
+        printf("=========================================\n\n");
 
-    lerTexto("Marca: ", marcaBusca, 100);
+        if (totalProdutos == 0) {
+            printf("Nenhum produto cadastrado.\n");
+            pausar();
+            break;
+        }
 
-    for (int i = 0; i < totalProdutos; i++) {
-        if (textosIguais(produtos[i].marca, marcaBusca)) {
-            printf("%d - %s | Lote: %s (Qtd: %d)\n", produtos[i].id, produtos[i].nome,
-                   produtos[i].lote, produtos[i].quantidade);
-            encontrado = 1;
+        char marcaBusca[100];
+        int encontrado = 0;
+
+        lerTexto("Marca: ", marcaBusca, 100);
+
+        printf("\n");
+        for (int i = 0; i < totalProdutos; i++) {
+            if (textosIguais(produtos[i].marca, marcaBusca)) {
+                printf("%d - %s | Lote: %s (Qtd: %d)\n", produtos[i].id, produtos[i].nome,
+                       produtos[i].lote, produtos[i].quantidade);
+                encontrado = 1;
+            }
+        }
+
+        if (encontrado == 0)
+            printf("Nenhum produto encontrado para essa marca.\n");
+
+        char resposta[10];
+        lerTexto("\nDeseja filtrar por outra marca? (s/n): ", resposta, sizeof(resposta));
+        if (resposta[0] == 's' || resposta[0] == 'S') {
+            continue;
+        } else {
+            break;
         }
     }
-
-    if (encontrado == 0)
-        printf("Nenhum produto encontrado para essa marca.\n");
 }
 
 void listarProdutos(void) {
+    limparTela();
+    printf("=========================================\n");
+    printf("          LISTA DE PRODUTOS              \n");
+    printf("=========================================\n\n");
+
     if (totalProdutos == 0) {
         printf("Nenhum produto cadastrado.\n");
+        pausar();
         return;
     }
 
@@ -325,6 +404,8 @@ void listarProdutos(void) {
                produtos[i].id, produtos[i].nome, produtos[i].marca,
                produtos[i].lote, produtos[i].validade, produtos[i].quantidade);
     }
+
+    pausar();
 }
 
 int indiceLotePrioritario(const char *codigo) {
@@ -340,69 +421,136 @@ int indiceLotePrioritario(const char *codigo) {
 }
 
 void registrarSaida(void) {
-    char codigo[100];
-    int quantidadeSaida;
-    int encontrado = 0;
-    int totalDisponivel = 0;
+    while (1) {
+        limparTela();
+        printf("=========================================\n");
+        printf("         REGISTRAR SAIDA DE ESTOQUE      \n");
+        printf("=========================================\n\n");
 
-    lerTexto("Codigo de barras: ", codigo, 100);
+        if (totalProdutos == 0) {
+            printf("Nenhum produto cadastrado.\n");
+            pausar();
+            break;
+        }
 
-    for (int i = 0; i < totalProdutos; i++) {
-        if (strcmp(produtos[i].codigoBarras, codigo) == 0) {
-            encontrado = 1;
-            totalDisponivel = totalDisponivel + produtos[i].quantidade;
+        char codigo[100];
+        int quantidadeSaida;
+        int encontrado = 0;
+        int totalDisponivel = 0;
+
+        lerTexto("Codigo de barras: ", codigo, 100);
+
+        for (int i = 0; i < totalProdutos; i++) {
+            if (strcmp(produtos[i].codigoBarras, codigo) == 0) {
+                encontrado = 1;
+                totalDisponivel = totalDisponivel + produtos[i].quantidade;
+            }
+        }
+
+        if (!encontrado) {
+            printf("\nProduto nao encontrado.\n");
+            char resposta[10];
+            lerTexto("\nDeseja tentar registrar outra saida? (s/n): ", resposta, sizeof(resposta));
+            if (resposta[0] == 's' || resposta[0] == 'S') {
+                continue;
+            } else {
+                break;
+            }
+        }
+
+        if (totalDisponivel == 0) {
+            printf("\nEste produto esta sem estoque disponivel (saldo 0).\n");
+            char resposta[10];
+            lerTexto("\nDeseja tentar registrar outra saida? (s/n): ", resposta, sizeof(resposta));
+            if (resposta[0] == 's' || resposta[0] == 'S') {
+                continue;
+            } else {
+                break;
+            }
+        }
+
+        printf("\nEstoque atual (todos os lotes): %d\n", totalDisponivel);
+        quantidadeSaida = lerInteiro("Quantidade a retirar: ", 1);
+
+        if (quantidadeSaida > totalDisponivel) {
+            printf("\nQuantidade invalida (maior que o estoque em loja).\n");
+            char resposta[10];
+            lerTexto("\nDeseja tentar registrar outra saida? (s/n): ", resposta, sizeof(resposta));
+            if (resposta[0] == 's' || resposta[0] == 'S') {
+                continue;
+            } else {
+                break;
+            }
+        }
+
+        int restante = quantidadeSaida;
+        printf("\n");
+        while (restante > 0) {
+            int indice = indiceLotePrioritario(codigo);
+            int retirada = restante < produtos[indice].quantidade ? restante : produtos[indice].quantidade;
+
+            produtos[indice].quantidade = produtos[indice].quantidade - retirada;
+            estoqueMensal[indice][mesAtual()] = produtos[indice].quantidade;
+            restante = restante - retirada;
+
+            printf("Retirado %d un. do lote %s (validade %s). Saldo do lote: %d\n",
+                   retirada, produtos[indice].lote, produtos[indice].validade, produtos[indice].quantidade);
+        }
+
+        printf("\nSaida registrada com sucesso!\n");
+
+        char resposta[10];
+        lerTexto("\nDeseja registrar outra saida de estoque? (s/n): ", resposta, sizeof(resposta));
+        if (resposta[0] == 's' || resposta[0] == 'S') {
+            continue;
+        } else {
+            break;
         }
     }
-
-    if (!encontrado) {
-        printf("Produto nao encontrado.\n");
-        return;
-    }
-
-    printf("Estoque atual (todos os lotes): %d\n", totalDisponivel);
-    quantidadeSaida = lerInteiro("Quantidade a retirar: ", 1);
-
-    if (quantidadeSaida > totalDisponivel) {
-        printf("Quantidade invalida (maior que o estoque em loja).\n");
-        return;
-    }
-
-    int restante = quantidadeSaida;
-    while (restante > 0) {
-        int indice = indiceLotePrioritario(codigo);
-        int retirada = restante < produtos[indice].quantidade ? restante : produtos[indice].quantidade;
-
-        produtos[indice].quantidade = produtos[indice].quantidade - retirada;
-        estoqueMensal[indice][mesAtual()] = produtos[indice].quantidade;
-        restante = restante - retirada;
-
-        printf("Retirado %d un. do lote %s (validade %s). Saldo do lote: %d\n",
-               retirada, produtos[indice].lote, produtos[indice].validade, produtos[indice].quantidade);
-    }
-
-    printf("Saida registrada.\n");
 }
 
 void exibirEstoqueMensal(void) {
-    char *meses[12] = {"Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-                        "Jul", "Ago", "Set", "Out", "Nov", "Dez"};
+    limparTela();
+    printf("===================================================================================================================\n");
+    printf("                                             MATRIZ DE ESTOQUE MENSAL                                              \n");
+    printf("===================================================================================================================\n\n");
 
     if (totalProdutos == 0) {
-        printf("Nenhum produto cadastrado.\n");
+        printf("Nenhum produto cadastrado no momento.\n");
+        pausar();
         return;
     }
 
-    printf("\n%-20s%-12s", "Produto", "Lote");
-    for (int mes = 0; mes < 12; mes++)
-        printf("%5s", meses[mes]);
-    printf("\n");
+    const char *mesesNomes[12] = {
+        "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
+        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    };
+    const char *mesesSiglas[12] = {
+        "JAN", "FEV", "MAR", "ABR", "MAI", "JUN",
+        "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"
+    };
+    int mesAtualIdx = mesAtual();
+
+    printf(" Referencia: Ano Vigente | Mes Atual: %s (%s) | Total de Lotes Cadastrados: %d\n\n",
+           mesesNomes[mesAtualIdx], mesesSiglas[mesAtualIdx], totalProdutos);
+
+    printf("+-----+----------------------+------------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+\n");
+    printf("| ID  | PRODUTO              | LOTE       | JAN | FEV | MAR | ABR | MAI | JUN | JUL | AGO | SET | OUT | NOV | DEZ |\n");
+    printf("+-----+----------------------+------------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+\n");
 
     for (int i = 0; i < totalProdutos; i++) {
-        printf("%-20.19s%-12.11s", produtos[i].nome, produtos[i].lote);
-        for (int mes = 0; mes < 12; mes++)
-            printf("%5d", estoqueMensal[i][mes]);
+        printf("| %3d | %-20.20s | %-10.10s |", produtos[i].id, produtos[i].nome, produtos[i].lote);
+        for (int mes = 0; mes < 12; mes++) {
+            printf("%4d |", estoqueMensal[i][mes]);
+        }
         printf("\n");
     }
+
+    printf("+-----+----------------------+------------+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+-----+\n");
+    printf(" Legenda: As colunas indicam o saldo de estoque registrado para cada mes do ano vigente.\n");
+    printf("===================================================================================================================\n");
+
+    pausar();
 }
 
 void salvarDados(void) {
@@ -436,19 +584,24 @@ void carregarDados(void) {
             break;
         }
         produtos[totalProdutos] = p;
+        estoqueMensal[totalProdutos][mesAtual()] = p.quantidade;
         totalProdutos = totalProdutos + 1;
     }
     fclose(arquivo);
 }
 
 void exibirMenu(void) {
-    printf("\n1 - Cadastrar produto\n");
-    printf("2 - Procurar produto pelo nome\n");
-    printf("3 - Filtrar produtos por marca\n");
-    printf("4 - Listar todos os produtos\n");
-    printf("5 - Registrar saida de estoque\n");
-    printf("6 - Exibir estoque mensal\n");
-    printf("0 - Sair\n");
+    printf("=========================================\n");
+    printf("       GERENCIAMENTO DE ESTOQUE          \n");
+    printf("=========================================\n");
+    printf(" 1 - Cadastrar produto\n");
+    printf(" 2 - Procurar produto pelo nome\n");
+    printf(" 3 - Filtrar produtos por marca\n");
+    printf(" 4 - Listar todos os produtos\n");
+    printf(" 5 - Registrar saida de estoque\n");
+    printf(" 6 - Exibir estoque mensal\n");
+    printf(" 0 - Sair\n");
+    printf("=========================================\n");
 }
 
 int main(void) {
@@ -457,6 +610,7 @@ int main(void) {
     carregarDados();
 
     do {
+        limparTela();
         exibirMenu();
         opcao = lerInteiro("Escolha uma opcao: ", 0);
 
@@ -468,11 +622,13 @@ int main(void) {
             case 5: registrarSaida(); break;
             case 6: exibirEstoqueMensal(); break;
             case 0:
+                limparTela();
                 salvarDados();
-                printf("Dados salvos. Encerrando...\n");
+                printf("Dados salvos com sucesso. Encerrando...\n");
                 break;
             default:
-                printf("Opcao invalida.\n");
+                printf("\nOpcao invalida.\n");
+                pausar();
         }
     } while (opcao != 0);
 
